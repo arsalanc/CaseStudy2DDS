@@ -1,0 +1,303 @@
+---
+title: "Project 2"
+author: "Arsalan"
+date: '2022-07-28'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning =FALSE, message=FALSE)
+```
+
+## Introduction
+In this case study we want to look at employee attributes to predict attrition rates. We also want to look at Income prediction using a regression model.
+
+## Data Exploration
+First we want to look at the data set from a broad perspective and look at any trends we might see
+```{r , echo=FALSE}
+data = read.csv("D:\\MSDS\\DS 6306\\MSDS_6306_Doing-Data-Science\\Unit 14 and 15 Case Study 2\\CaseStudy2-data.csv",header = TRUE)
+options(warn = 0)  
+library(tidyverse)
+library(e1071)
+library(ggplot2)
+library(GGally)
+library(class)
+library(caret)
+```
+
+```{r }
+
+
+plot = ggplot(data = data, aes(x = Attrition)) + 
+  geom_bar() + facet_wrap(~StockOptionLevel) + ggtitle("Attrition Rate By Stock Option Level") 
+plot
+
+plot = ggplot(data = data, aes(x = Attrition)) + 
+  geom_bar() + facet_wrap(~Department) + ggtitle("Attrition Rate by Department")
+plot
+
+plot = ggplot(data = data, aes(x = Attrition)) + 
+  geom_bar() + facet_wrap(~JobSatisfaction) + ggtitle("Attrition Rate by Job Satisfaction")
+plot
+
+plot = ggplot(data = data, aes(x = Attrition)) + 
+  geom_bar() + facet_wrap(~YearsAtCompany) + ggtitle("Attrition Rate by Years at company")
+plot
+
+plot = ggplot(data = data, aes(x = Attrition)) + 
+  geom_bar() + facet_wrap(~TrainingTimesLastYear) + ggtitle("Attrition Rate by training time")
+plot
+
+ggpairs(data, columns = c(2, 3, 4,5, 6), aes(color = data$Attrition))
+ggpairs(data, columns = c(2, 3, 7,8,9),  aes(color = data$Attrition))
+ggpairs(data,columns = c(2,7,12,17), aes(color = data$Attrition))
+ggpairs(data, columns = c(3, 24,6,4),  aes(color = data$Attrition))
+#environment Satisfaction, Hourly Rate Job Level and Job Role
+
+
+```
+
+## Naive Bayes for Attrition
+
+
+# Initial Naive Bayes 
+Because we want to look at categorical variables to predict attrition. I felt that taking the Naive Bayes approach would be better.
+Our first model using (environment Satisfaction, Hourly Rate Job Level and Job Role) gets a fairly high accuracy and sensitivity but gives us a very low specificity. This is not good for predicting attrition rate. From here we adjust our model
+
+```{r }
+trainInd = sample(seq(1,dim(data)[1],1),round(.7*dim(data)[1]))
+dataTrain = data[trainInd,]
+dataTest = data[-trainInd,]
+
+model = naiveBayes(x = dataTrain[c(4,6,12, 14,16,17,24)], dataTrain$Attrition)
+CM = confusionMatrix(table(predict(model, dataTest[,c(4,6,12, 14,16,17,24)]), dataTest$Attrition))
+
+CM
+
+
+```
+# Trying Naive Bayes with more columns, removing unrelated columns such as employee number
+```{r }
+
+masterAcc = matrix(nrow = 100)
+masterSen = matrix(nrow = 100)
+masterSpec = matrix(nrow = 100)
+for(j in 1:100)
+{
+  set.seed(NULL)
+  trainInd = sample(seq(1,dim(data)[1],1),round(.7*dim(data)[1]))
+  dataTrain = data[trainInd,]
+  dataTest = data[-trainInd,]
+    
+ 
+  model = naiveBayes(x = dataTrain[c(2,4:9,12:17, 19:24, 26, 28:36)], dataTrain$Attrition)
+  CM = confusionMatrix(table(predict(model, dataTest[,c(2,4:9,12:17, 19:24, 26, 28:36)]), dataTest$Attrition))
+  
+  masterAcc[j] = CM$overall['Accuracy']
+  masterSen[j] = CM$byClass['Sensitivity']
+  masterSpec[j] = CM$byClass['Specificity']
+
+}
+
+MeanAcc = colMeans(masterAcc)
+MeanSen = colMeans(masterSen)
+MeanSpec = colMeans(masterSpec)
+
+cat('mean accuracy: ', MeanAcc, '\n')
+cat('mean sensitivity: ', MeanSen, '\n')
+cat('mean specificity: ', MeanSpec, '\n')
+
+
+
+
+```
+
+
+
+# UnderSampling
+Since our data was very unbalanced, I thought that trying to under sample the data for No attrition might give us better results.
+This brought down our overall accuracy as well as our sensitivity but our specificity shot up when testing with the same test set.
+This model is much better at predicting attrition rates.
+```{r }
+
+
+masterAcc = matrix(nrow = 100)
+masterSen = matrix(nrow = 100)
+masterSpec = matrix(nrow = 100)
+for(j in 1:100)
+{
+  set.seed(NULL)
+  trainInd = sample(seq(1,dim(data)[1],1),round(.7*dim(data)[1]))
+  dataTrain = data[trainInd,]
+  dataTest = data[-trainInd,]
+  
+  data_noatt = dataTrain[dataTrain$Attrition == "No",]
+  data_noatt <- data_noatt[sample(1:nrow(data_noatt), 0.7*nrow(data_noatt)), ]
+  data_att = data[data$Attrition == "Yes",]
+  cut_data = rbind(data_att,data_noatt)
+  
+  
+  model = naiveBayes(x = cut_data[c(2,4:9,12:17, 19:24, 26, 28:36)], cut_data$Attrition)
+  CM = confusionMatrix(table(predict(model, dataTest[,c(2,4:9,12:17, 19:24, 26, 28:36)]), dataTest$Attrition))
+  CM
+  masterAcc[j] = CM$overall['Accuracy']
+  masterSen[j] = CM$byClass['Sensitivity']
+  masterSpec[j] = CM$byClass['Specificity']
+
+}
+
+MeanAcc = colMeans(masterAcc)
+MeanSen = colMeans(masterSen)
+MeanSpec = colMeans(masterSpec)
+
+cat('mean accuracy: ', MeanAcc, '\n')
+cat('mean sensitivity: ', MeanSen, '\n')
+cat('mean specificity: ', MeanSpec, '\n')
+
+```
+
+
+## Salary correlation data exploration
+When looking for a model to predict salary I wanted to find columns that have some correlation with MonthlyIncome.
+
+
+```{r }
+
+#Job level linearly correlated with Monthly Income
+plot = ggplot(data = data, aes(x = JobLevel, y=MonthlyIncome, col = JobRole)) + 
+  geom_point() + ggtitle("Job Level vs Monthly income") +geom_smooth(method  = "lm")
+plot
+
+#Total Working Years linearly correlated with Monthly Income
+plot = ggplot(data = data, aes(x = TotalWorkingYears, y=MonthlyIncome, col = OverTime)) + 
+  geom_point() + ggtitle("Total Working Years vs Monthly income") +geom_smooth(method  = "lm")
+plot
+#Years at Company correlated with MOnthly Income
+plot = ggplot(data = data, aes(x = YearsAtCompany, y=MonthlyIncome, col = OverTime)) + 
+  geom_point() + ggtitle("Years at Company vs Monthly income") +geom_smooth(method  = "lm")
+plot
+
+plot = ggplot(data = data, aes(x = JobRole, y=MonthlyIncome)) + 
+  geom_point() + ggtitle("JobRole vs Monthly income") +geom_smooth(method  = "lm")
+plot
+
+plot = ggplot(data = data, aes(x = YearsInCurrentRole, y=MonthlyIncome)) + 
+  geom_point() + ggtitle("Years In Current Role vs Monthly income") +geom_smooth(method  = "lm")
+plot
+
+plot = ggplot(data = data, aes(x = YearsSinceLastPromotion, y=MonthlyIncome)) + 
+  geom_point() + ggtitle("Years In Current Role vs Monthly income") +geom_smooth(method  = "lm")
+plot
+
+# Worth looking at:
+#   JobLevel
+#   TotalWorkingYears
+#   YearsAtCompany
+#   JobRole
+#   YearsInCurrentRole
+#   YearsSinceLastPromotion
+
+
+# Not worth looking at:
+#   DailyRate
+#   Education
+#   DistanceFromHome
+#   EducationField
+#   Department
+#   JobSatisfaction
+
+
+```
+
+## Fit models and calculate RMSE for each role separately
+Using one model for all of the data was giving me an RMSE ~ 9000, since job role effects the slope and intercept of our model when looking at job level it seemed reasonable to create separate linear models based on job role, this gave me more reasonable RMSE values
+```{r}
+library(boot)
+
+# split data by job role to create multiple models
+options(warn = 0)  
+joblist = c("Healthcare Representative", "Human Resources", "Laboratory Technician", "Manager","Manufacturing Director","Research Director","Research Scientist","Sales Executive", "Sales Representative")
+
+trainInd = sample(seq(1,dim(data)[1],1),round(.7*dim(data)[1]))
+dataTrain = data[trainInd,]
+dataTest = data[-trainInd,]
+for (role in joblist){
+  cat('role: ', role, '\n')
+  trainrole = dataTrain[dataTrain$JobRole == role,]
+  testrole = dataTest[dataTest$JobRole == role,]
+  
+  fit = glm(MonthlyIncome~JobLevel+TotalWorkingYears+YearsAtCompany+YearsInCurrentRole+YearsSinceLastPromotion, data = trainrole)
+  
+  cv2 = cv.glm(testrole,fit)
+  MSE = cv2$delta
+  RMSE = sqrt(cv2$delta)
+  RMSE
+
+  #summary(fit)
+  pred = as.data.frame(predict(fit, data = dataTest[dataTest$JobRole == role,]))
+  pred2 = as.data.frame(pred)
+  residuals = dataTest[dataTest$JobRole == role,]$MonthlyIncome - pred
+  RMSE = sqrt(sum(residuals^2)/length(dataTest[dataTest$JobRole == role,]$MonthlyIncome))
+  RMSE
+  cat('RMSE for ', role, ' is ',RMSE, '\n')
+  
+}
+
+```
+
+## Running our Attrition model on New data set
+```{r}
+data_No_Attrition = read.csv("D:\\MSDS\\DS 6306\\MSDS_6306_Doing-Data-Science\\Unit 14 and 15 Case Study 2\\CaseStudy2CompSet No Attrition.csv",header = TRUE)
+datacols = cut_data[c(2,4:9,12:17, 19:24, 26, 28:36)]
+dim(data_No_Attrition)
+trained_cols = colnames(datacols) 
+
+data_No_attrition_cols = data_No_Attrition[trained_cols]
+
+data_No_Attrition$Attrition = predict(model, data_No_Attrition[trained_cols])
+table(data_No_Attrition$Attrition)
+
+writeattrition <- data.frame(data_No_Attrition$ID, data_No_Attrition$Attrition)
+
+colnames(writeattrition) <- c("ID","Attrition")
+head(writeattrition)
+
+
+write.csv(writeattrition,"D:\\Documents\\DDS_Project2\\Case2PredictionsChandwani Attrition.csv")
+
+```
+
+
+
+## Running our Monthly Income model on New data set
+```{r}
+data_No_Monthly = read.csv("D:\\MSDS\\DS 6306\\MSDS_6306_Doing-Data-Science\\Unit 14 and 15 Case Study 2\\CaseStudy2CompSet No Salary.csv",header = TRUE)
+dim(data_No_Monthly)
+
+
+dffinal = data.frame(matrix(ncol=2,nrow=0))
+colnames(dffinal) <- c("ID","MonthlyIncome")
+
+for (role in joblist){
+  cat('role: ', role, '\n')
+  dataforrole = data_No_Monthly[data_No_Monthly$JobRole == role,]
+  
+  
+  fit = glm(MonthlyIncome~JobLevel+TotalWorkingYears+YearsAtCompany+YearsInCurrentRole+YearsSinceLastPromotion, data = data[data$JobRole == role,])
+  
+  
+  dataforrole$MonthlyIncome = (predict(fit, dataforrole))
+  
+  writeMonthly <- data.frame(dataforrole$ID, dataforrole$MonthlyIncome)
+  colnames(writeMonthly) <- c("ID","MonthlyIncome")
+  dffinal <- rbind(dffinal,writeMonthly)
+}
+
+dfx =dffinal[order(dffinal$ID),]
+head(dfx)
+write.csv(dfx,"D:\\Documents\\DDS_Project2\\Case2PredictionsChandwani Salary.csv")
+
+```
+
+
+
